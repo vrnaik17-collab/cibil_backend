@@ -93,7 +93,13 @@ app.post('/api/submit-otp', async (req, res) => {
     await page.waitForSelector('input[type="tel"].otp-input, input[name="otp"]', { timeout: 8000 });
     
     // Type target OTP code string directly into target container
-    await page.type('input[type="tel"].otp-input, input[name="otp"]', otp);
+    // Try primary selector first, fallback to secondary
+    try {
+      await page.type('input[type="tel"].otp-input', otp);
+    } catch {
+      await page.type('input[name="otp"]', otp);
+    }
+    
     await page.click('button.submit-otp-btn');
 
     // Wait for internal credit score routing layout compilation to finish rendering
@@ -117,14 +123,22 @@ app.post('/api/submit-otp', async (req, res) => {
     });
 
     // Cleanup: Terminate isolated chromium tasks immediately post data acquisition
-    await browser.close();
+    try {
+      await browser.close();
+    } catch (closeErr) {
+      console.warn(`Warning: Failed to close browser for ${sessionId}:`, closeErr.message);
+    }
     activeSessions.delete(sessionId);
 
     return res.status(200).json(reportData);
 
   } catch (err) {
     console.error(`OTP Submission Execution failure for ${sessionId}:`, err);
-    if (browser) await browser.close();
+    try {
+      if (browser) await browser.close();
+    } catch (closeErr) {
+      console.warn(`Warning: Failed to close browser during error cleanup for ${sessionId}:`, closeErr.message);
+    }
     activeSessions.delete(sessionId);
     return res.status(500).json({ success: false, message: "OTP verification failed or timeout waiting for dashboard data." });
   }
