@@ -1,11 +1,9 @@
 const express = require('express');
-// Using puppeteer-extra wrapper to attach the stealth layer
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cors = require('cors');
 const crypto = require('crypto');
 
-// Inject the stealth plugin globally into the engine instance
 puppeteer.use(StealthPlugin());
 
 const app = express();
@@ -14,18 +12,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-/* ─────────────────────────────────────────────
-   STORE ACTIVE SESSIONS
-───────────────────────────────────────────── */
 const sessions = {};
 
-/* ─────────────────────────────────────────────
-   HEALTH CHECK
-───────────────────────────────────────────── */
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'CIBIL Stealth Backend Running ✅',
+    message: 'CIBIL Webshare Proxy Pipeline Active ✅',
     time: new Date().toISOString()
   });
 });
@@ -47,13 +39,12 @@ app.post('/api/fill-form', async (req, res) => {
     sessionId = crypto.randomUUID();
   }
 
-  console.log(`[fill-form] Starting stealth pipeline for mobile: ${mobile}`);
+  console.log(`[fill-form] Starting Webshare pipeline for mobile: ${mobile}`);
 
   let browser;
 
   try {
     browser = await puppeteer.launch({
-      // Set to false locally to visually debug form flows
       headless: true, 
       args: [
         '--no-sandbox',
@@ -63,36 +54,33 @@ app.post('/api/fill-form', async (req, res) => {
         '--no-first-run',
         '--no-zygote',
         '--disable-gpu',
-        // OPTIONAL PROXY OVERLAY: Uncomment line below if deploying to Render/AWS cloud platforms
-        // '--proxy-server=http://your-residential-proxy.com:port'
+        // ROUTE TRAFFIC THROUGH WEBSHARE BACKBONE GATEWAY
+        '--proxy-server=http://p.webshare.io:80'
       ]
     });
 
     const page = await browser.newPage();
 
-    // OPTIONAL PROXY AUTHENTICATION: Uncomment lines below if your proxy requires credentials
-    // await page.authenticate({
-    //   username: 'your_proxy_username',
-    //   password: 'your_proxy_password'
-    // });
+    // AUTHENTICATE WEBSHARE PROXY PIPELINE
+    await page.authenticate({
+      username: 'amxvrlbw',
+      password: 't2u8iw768lr6'
+    });
 
-    // Enforce a realistic modern high-definition display canvas boundary
     await page.setViewport({
       width: 1440,
       height: 900
     });
 
-    // Emulate completely authentic desktop hardware characteristics
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     );
     
-    // Explicit extra headers mirroring normal browser configurations
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
     });
 
-    console.log('[fill-form] Opening Urban Money...');
+    console.log('[fill-form] Opening Urban Money via Webshare Proxy...');
     await page.goto(
       'https://www.urbanmoney.com/cibil-credit-score',
       {
@@ -106,11 +94,8 @@ app.post('/api/fill-form', async (req, res) => {
     /* ─────────────────────────────────────────────
        PRECISE DOM INTERACTION & PARAMETER INJECTION
     ───────────────────────────────────────────── */
-    
-    // 1. Full Name
     await fillField(page, ['input[name="fullName"]'], name);
 
-    // 2. Date of Birth (Bypasses readonly restriction dynamically)
     try {
       await page.waitForSelector('input[name="dob"]', { visible: true, timeout: 5000 });
       await page.evaluate((dobValue) => {
@@ -124,21 +109,13 @@ app.post('/api/fill-form', async (req, res) => {
       }, dob);
       console.log('✓ Filled input[name="dob"] via DOM override');
     } catch (e) {
-      console.log('✗ Could not override DOB field layout:', e.message);
+      console.log('✗ DOB field bypass error:', e.message);
     }
 
-    // 3. Mobile Number
     await fillField(page, ['input[name="mobile"]'], mobile);
-
-    // 4. Email Address
     await fillField(page, ['input[name="email"]'], email);
-
-    // 5. PAN Card Number (Enforces mandatory capitalized matching patterns)
     await fillField(page, ['input[name="panCard"]'], pan.toUpperCase());
 
-    /* ─────────────────────────────────────────────
-       HANDLE EXPLICIT TUCIBIL CONSENT CHECKBOX
-    ───────────────────────────────────────────── */
     try {
       const consentSelector = 'input[name="consentStatement"]';
       await page.waitForSelector(consentSelector, { timeout: 5000 });
@@ -149,7 +126,7 @@ app.post('/api/fill-form', async (req, res) => {
         console.log('[fill-form] Consent Checkbox checked successfully');
       }
     } catch (e) {
-      console.log('[fill-form] Consent handling exception tracker:', e.message);
+      console.log('[fill-form] Consent handling tracker exception:', e.message);
     }
 
     await delay(1500);
@@ -160,7 +137,6 @@ app.post('/api/fill-form', async (req, res) => {
     const submitBtnSelector = 'button.btn_cibil_credit_score';
     await page.waitForSelector(submitBtnSelector, { visible: true, timeout: 5000 });
 
-    // Dispatch synthetic bubble state loops to update underlying React array stores
     await page.evaluate(() => {
       const inputs = document.querySelectorAll('.formInput, .form-check-input, input');
       inputs.forEach(input => {
@@ -171,27 +147,24 @@ app.post('/api/fill-form', async (req, res) => {
     });
     await delay(800);
 
-    // Bring elements comfortably to the viewport center area
     await page.evaluate((sel) => {
       document.querySelector(sel).scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, submitBtnSelector);
     await delay(1200);
 
-    // Emulate physical mouse actions using specialized element handle hooks
     const submitButtonHandle = await page.$(submitBtnSelector);
     await submitButtonHandle.hover();
     await delay(300);
     await page.click(submitBtnSelector);
     console.log('✓ Dispatched coordinate hover click onto: Check Credit Score');
 
-    // FALLBACK: Directly execute structural form tracking if modal fails to appear via click
     await delay(2500);
     const modalVisible = await page.evaluate(() => {
       return !!document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox');
     });
 
     if (!modalVisible) {
-      console.log('⚠️ Click failed to initiate layout shift, forcing form submission event via DOM...');
+      console.log('⚠️ Form submission stuck, forcing execution event via DOM submission fallback...');
       await page.evaluate(() => {
         const inputField = document.querySelector('input[name="fullName"]');
         if (inputField && inputField.form) {
@@ -202,7 +175,6 @@ app.post('/api/fill-form', async (req, res) => {
 
     console.log('[fill-form] Waiting for security modal layer validation response...');
     
-    // Evaluate functional visibility configurations dynamically across multiple fallback selector mutations
     await page.waitForFunction(() => {
       const modal = document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox, div[class*="thanksMessage"]');
       if (modal) {
@@ -214,12 +186,8 @@ app.post('/api/fill-form', async (req, res) => {
 
     console.log('✓ Success: OTP Modal window rendered safely.');
 
-    sessions[sessionId] = {
-      browser,
-      page
-    };
+    sessions[sessionId] = { browser, page };
 
-    /* AUTO CLEANUP (Kills tracking instance memory footprints after 10 minutes) */
     setTimeout(async () => {
       if (sessions[sessionId]) {
         try {
@@ -270,10 +238,9 @@ app.post('/api/submit-otp', async (req, res) => {
   try {
     const digits = otp.toString().split('');
     if (digits.length !== 6) {
-      throw new Error("Invalid array dimensions. Core transaction tokens require 6 digits.");
+      throw new Error("Invalid format. Tokens require 6 digits.");
     }
 
-    // Maps string elements individually down target arrays sequentially (otp1 -> otp6)
     for (let i = 0; i < 6; i++) {
       const fieldSelector = `input[name="otp${i + 1}"]`;
       await page.waitForSelector(fieldSelector, { visible: true, timeout: 5000 });
@@ -286,7 +253,6 @@ app.post('/api/submit-otp', async (req, res) => {
 
     await delay(1200);
     
-    // Explicit interactive hook targeting action verification layout arrays
     const verifyBtnSelector = 'div[class*="thanksMessage"] button';
     await page.waitForSelector(verifyBtnSelector, { visible: true, timeout: 5000 });
     await page.click(verifyBtnSelector);
@@ -295,7 +261,6 @@ app.post('/api/submit-otp', async (req, res) => {
     console.log('[submit-otp] Fetching user analytical reporting dashboards...');
     await delay(12000); 
 
-    // Regular Expression patterns analyzing textual representations to harvest credit score values
     const scoreData = await page.evaluate(() => {
       const txt = document.body.innerText;
       const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
@@ -391,13 +356,11 @@ async function fillField(page, selectors, value) {
         await page.keyboard.press('Backspace');
         await delay(150);
 
-        // Uses a human rhythm cadence structure with variable character millisecond delay bounds
         for (const char of value.toString()) {
           await el.type(char);
           await delay(Math.floor(Math.random() * 50) + 50); 
         }
 
-        // Inform internal frame tracking frameworks that input state conditions have shifted
         await page.evaluate(element => {
           element.dispatchEvent(new Event('input', { bubbles: true }));
           element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -409,20 +372,14 @@ async function fillField(page, selectors, value) {
       }
     } catch (e) {}
   }
-  console.log(`✗ Internal locator sequence trace failed inside boundaries: ${selectors}`);
+  console.log(`✗ Locator sequence trace failed inside boundaries: ${selectors}`);
   return false;
 }
 
-/* ─────────────────────────────────────────────
-   DELAY HELPER
-───────────────────────────────────────────── */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/* ─────────────────────────────────────────────
-   START SERVER
-───────────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`✅ Stealth Pipeline Backend running on port ${PORT}`);
+  console.log(`✅ Webshare-Proxied Backend running on port ${PORT}`);
 });
