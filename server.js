@@ -4,6 +4,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cors = require('cors');
 const crypto = require('crypto');
 
+// Enforce browser signature modification engine
 puppeteer.use(StealthPlugin());
 
 const app = express();
@@ -12,12 +13,18 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+/* ─────────────────────────────────────────────
+   STORE ACTIVE SESSIONS
+───────────────────────────────────────────── */
 const sessions = {};
 
+/* ─────────────────────────────────────────────
+   HEALTH CHECK
+───────────────────────────────────────────── */
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'CIBIL Webshare Proxy Pipeline Active ✅',
+    message: 'CIBIL Direct Stealth Backend Running ✅',
     time: new Date().toISOString()
   });
 });
@@ -39,12 +46,13 @@ app.post('/api/fill-form', async (req, res) => {
     sessionId = crypto.randomUUID();
   }
 
-  console.log(`[fill-form] Starting Webshare pipeline for mobile: ${mobile}`);
+  console.log(`[fill-form] Starting direct connection pipeline for mobile: ${mobile}`);
 
   let browser;
 
   try {
     browser = await puppeteer.launch({
+      // Toggle to false locally on your Chromebook to visually debug page reactions
       headless: true, 
       args: [
         '--no-sandbox',
@@ -53,25 +61,19 @@ app.post('/api/fill-form', async (req, res) => {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu',
-        // ROUTE TRAFFIC THROUGH WEBSHARE BACKBONE GATEWAY
-        '--proxy-server=http://p.webshare.io:80'
+        '--disable-gpu'
       ]
     });
 
     const page = await browser.newPage();
 
-    // AUTHENTICATE WEBSHARE PROXY PIPELINE
-    await page.authenticate({
-      username: 'amxvrlbw',
-      password: 't2u8iw768lr6'
-    });
-
+    // Enforce standard realistic modern layout canvas dimension criteria
     await page.setViewport({
       width: 1440,
       height: 900
     });
 
+    // Emulate completely authentic clean hardware platform traits
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     );
@@ -80,7 +82,7 @@ app.post('/api/fill-form', async (req, res) => {
       'Accept-Language': 'en-US,en;q=0.9',
     });
 
-    console.log('[fill-form] Opening Urban Money via Webshare Proxy...');
+    console.log('[fill-form] Connecting directly to Urban Money...');
     await page.goto(
       'https://www.urbanmoney.com/cibil-credit-score',
       {
@@ -94,8 +96,11 @@ app.post('/api/fill-form', async (req, res) => {
     /* ─────────────────────────────────────────────
        PRECISE DOM INTERACTION & PARAMETER INJECTION
     ───────────────────────────────────────────── */
+    
+    // 1. Full Name
     await fillField(page, ['input[name="fullName"]'], name);
 
+    // 2. Date of Birth (Overcomes frontend readonly element attribute constraints)
     try {
       await page.waitForSelector('input[name="dob"]', { visible: true, timeout: 5000 });
       await page.evaluate((dobValue) => {
@@ -109,13 +114,21 @@ app.post('/api/fill-form', async (req, res) => {
       }, dob);
       console.log('✓ Filled input[name="dob"] via DOM override');
     } catch (e) {
-      console.log('✗ DOB field bypass error:', e.message);
+      console.log('✗ DOB field bypass exception handler:', e.message);
     }
 
+    // 3. Mobile Number
     await fillField(page, ['input[name="mobile"]'], mobile);
+
+    // 4. Email Address
     await fillField(page, ['input[name="email"]'], email);
+
+    // 5. PAN Card Number (Converts characters strictly to uppercase)
     await fillField(page, ['input[name="panCard"]'], pan.toUpperCase());
 
+    /* ─────────────────────────────────────────────
+       HANDLE EXPLICIT TUCIBIL CONSENT CHECKBOX
+    ───────────────────────────────────────────── */
     try {
       const consentSelector = 'input[name="consentStatement"]';
       await page.waitForSelector(consentSelector, { timeout: 5000 });
@@ -126,17 +139,18 @@ app.post('/api/fill-form', async (req, res) => {
         console.log('[fill-form] Consent Checkbox checked successfully');
       }
     } catch (e) {
-      console.log('[fill-form] Consent handling tracker exception:', e.message);
+      console.log('[fill-form] Consent handling component exception:', e.message);
     }
 
     await delay(1500);
 
     /* ─────────────────────────────────────────────
-       CLICK SUBMIT & FORCE VALIDATION
+       CLICK SUBMIT & FORCE VALIDATION (Bypasses State Lock)
     ───────────────────────────────────────────── */
     const submitBtnSelector = 'button.btn_cibil_credit_score';
     await page.waitForSelector(submitBtnSelector, { visible: true, timeout: 5000 });
 
+    // Forces structural multi-layered validation layers to record programmatic keystrokes
     await page.evaluate(() => {
       const inputs = document.querySelectorAll('.formInput, .form-check-input, input');
       inputs.forEach(input => {
@@ -147,24 +161,27 @@ app.post('/api/fill-form', async (req, res) => {
     });
     await delay(800);
 
+    // Smooth viewport centering alignment sequence
     await page.evaluate((sel) => {
       document.querySelector(sel).scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, submitBtnSelector);
     await delay(1200);
 
+    // Dispatches realistic hover action scripts directly to button elements
     const submitButtonHandle = await page.$(submitBtnSelector);
     await submitButtonHandle.hover();
     await delay(300);
     await page.click(submitBtnSelector);
     console.log('✓ Dispatched coordinate hover click onto: Check Credit Score');
 
+    // FALLBACK FRAMEWORK: Triggers structural form elements directly via DOM if programmatic clicks break down
     await delay(2500);
     const modalVisible = await page.evaluate(() => {
       return !!document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox');
     });
 
     if (!modalVisible) {
-      console.log('⚠️ Form submission stuck, forcing execution event via DOM submission fallback...');
+      console.log('⚠️ Verification screen target unrendered, forcing form execution event via DOM submission fallback...');
       await page.evaluate(() => {
         const inputField = document.querySelector('input[name="fullName"]');
         if (inputField && inputField.form) {
@@ -173,8 +190,9 @@ app.post('/api/fill-form', async (req, res) => {
       });
     }
 
-    console.log('[fill-form] Waiting for security modal layer validation response...');
+    console.log('[fill-form] Waiting for validation modal challenge response display configurations...');
     
+    // Dynamically checks elements across explicit layout structural transformations
     await page.waitForFunction(() => {
       const modal = document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox, div[class*="thanksMessage"]');
       if (modal) {
@@ -184,17 +202,21 @@ app.post('/api/fill-form', async (req, res) => {
       return false;
     }, { timeout: 20000 });
 
-    console.log('✓ Success: OTP Modal window rendered safely.');
+    console.log('✓ Success: OTP Verification modal rendered successfully.');
 
-    sessions[sessionId] = { browser, page };
+    sessions[sessionId] = {
+      browser,
+      page
+    };
 
+    /* AUTO CLEANUP (Destroys dead session structures after a 10-minute timeout limit) */
     setTimeout(async () => {
       if (sessions[sessionId]) {
         try {
           await sessions[sessionId].browser.close();
         } catch (e) {}
         delete sessions[sessionId];
-        console.log(`[cleanup] Session ${sessionId} closed safely`);
+        console.log(`[cleanup] Session instance ${sessionId} terminated cleanly`);
       }
     }, 10 * 60 * 1000);
 
@@ -205,7 +227,7 @@ app.post('/api/fill-form', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[fill-form] CRITICAL PIPELINE FAILURE:', err.message);
+    console.error('[fill-form] PIPELINE CRITICAL STOPPAGE:', err.message);
     if (browser) {
       try {
         await browser.close();
@@ -223,7 +245,7 @@ app.post('/api/fill-form', async (req, res) => {
 ───────────────────────────────────────────── */
 app.post('/api/submit-otp', async (req, res) => {
   const { sessionId, otp } = req.body;
-  console.log(`[submit-otp] Injecting verification tokens: ${otp}`);
+  console.log(`[submit-otp] Processing tracking token array: ${otp}`);
 
   const session = sessions[sessionId];
   if (!session) {
@@ -238,9 +260,10 @@ app.post('/api/submit-otp', async (req, res) => {
   try {
     const digits = otp.toString().split('');
     if (digits.length !== 6) {
-      throw new Error("Invalid format. Tokens require 6 digits.");
+      throw new Error("Invalid structure size constraints. Input tokens require 6 single characters.");
     }
 
+    // Distributes individual token items across linear dynamic inputs (otp1 -> otp6)
     for (let i = 0; i < 6; i++) {
       const fieldSelector = `input[name="otp${i + 1}"]`;
       await page.waitForSelector(fieldSelector, { visible: true, timeout: 5000 });
@@ -249,18 +272,20 @@ app.post('/api/submit-otp', async (req, res) => {
       await page.keyboard.press('Backspace'); 
       await page.type(fieldSelector, digits[i], { delay: 60 });
     }
-    console.log('✓ Successfully mapped sequential verification tokens');
+    console.log('✓ Dispatched sequential identity inputs cleanly');
 
     await delay(1200);
     
+    // Target interactive links attached within verification layouts explicitly
     const verifyBtnSelector = 'div[class*="thanksMessage"] button';
     await page.waitForSelector(verifyBtnSelector, { visible: true, timeout: 5000 });
     await page.click(verifyBtnSelector);
-    console.log('✓ Submitted verification layout confirmation layer');
+    console.log('✓ Submitted target challenge verification configuration');
 
-    console.log('[submit-otp] Fetching user analytical reporting dashboards...');
+    console.log('[submit-otp] Processing data extraction parsing arrays...');
     await delay(12000); 
 
+    // Regular Expression blocks scanning raw string maps to harvest final credit report configurations
     const scoreData = await page.evaluate(() => {
       const txt = document.body.innerText;
       const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
@@ -356,11 +381,13 @@ async function fillField(page, selectors, value) {
         await page.keyboard.press('Backspace');
         await delay(150);
 
+        // Types content utilizing varied delays to decouple predictable mechanical inputs
         for (const char of value.toString()) {
           await el.type(char);
           await delay(Math.floor(Math.random() * 50) + 50); 
         }
 
+        // Bubbles updates directly to the parent web component states
         await page.evaluate(element => {
           element.dispatchEvent(new Event('input', { bubbles: true }));
           element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -376,10 +403,16 @@ async function fillField(page, selectors, value) {
   return false;
 }
 
+/* ─────────────────────────────────────────────
+   DELAY HELPER
+───────────────────────────────────────────── */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/* ─────────────────────────────────────────────
+   START SERVER
+───────────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`✅ Webshare-Proxied Backend running on port ${PORT}`);
+  console.log(`✅ Direct Clean Connection Stealth Backend running on port ${PORT}`);
 });
