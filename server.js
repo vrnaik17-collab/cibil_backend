@@ -47,8 +47,6 @@ app.post('/api/fill-form', async (req, res) => {
   let browser;
 
   try {
-    // Puppeteer automatically resolves the browser path using your 
-    // PUPPETEER_CACHE_DIR environment variable on Render.
     browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -76,7 +74,7 @@ app.post('/api/fill-form', async (req, res) => {
     console.log('[fill-form] Opening Urban Money...');
 
     await page.goto(
-      'https://www.urbanmoney.com/credit-score',
+      'https://www.urbanmoney.com/cibil-credit-score',
       {
         waitUntil: 'networkidle2',
         timeout: 60000
@@ -85,85 +83,70 @@ app.post('/api/fill-form', async (req, res) => {
 
     await delay(3000);
 
-    /* ─────────────────────────────
-       FILL NAME
-    ───────────────────────────── */
-    await fillField(page, [
-      'input[name="fullName"]',
-      'input[placeholder*="Full"]',
-      'input[id*="name"]',
-      'input'
-    ], name);
+    /* ─────────────────────────────────────────────
+       PRECISE DOM INTERACTION (TARGETED ROUTING)
+    ───────────────────────────────────────────── */
+    
+    // 1. Full Name
+    await fillField(page, ['input[name="fullName"]'], name);
+
+    // 2. Date of Birth (Readonly mitigation via Evaluation)
+    try {
+      await page.waitForSelector('input[name="dob"]', { timeout: 5000 });
+      await page.evaluate((dobValue) => {
+        const dobInput = document.querySelector('input[name="dob"]');
+        if (dobInput) {
+          dobInput.removeAttribute('readonly');
+          dobInput.value = dobValue;
+          dobInput.dispatchEvent(new Event('input', { bubbles: true }));
+          dobInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, dob);
+      console.log('✓ Filled input[name="dob"] via DOM override');
+    } catch (e) {
+      console.log('✗ Could not fill DOB field:', e.message);
+    }
+
+    // 3. Mobile Number
+    await fillField(page, ['input[name="mobile"]'], mobile);
+
+    // 4. Email Address
+    await fillField(page, ['input[name="email"]'], email);
+
+    // 5. PAN Card Number (Updated explicitly from 'pan' to 'panCard')
+    await fillField(page, ['input[name="panCard"]'], pan.toUpperCase());
 
     /* ─────────────────────────────
-       FILL DOB
-    ───────────────────────────── */
-    await fillField(page, [
-      'input[name="dateOfBirth"]',
-      'input[placeholder*="DOB"]',
-      'input[type="date"]'
-    ], dob);
-
-    /* ─────────────────────────────
-       FILL MOBILE
-    ───────────────────────────── */
-    await fillField(page, [
-      'input[name="mobile"]',
-      'input[name="mobileNumber"]',
-      'input[type="tel"]'
-    ], mobile);
-
-    /* ─────────────────────────────
-       FILL EMAIL
-    ───────────────────────────── */
-    await fillField(page, [
-      'input[name="email"]',
-      'input[type="email"]'
-    ], email);
-
-    /* ─────────────────────────────
-       FILL PAN
-    ───────────────────────────── */
-    await fillField(page, [
-      'input[name="pan"]',
-      'input[name="panNumber"]',
-      'input[placeholder*="PAN"]'
-    ], pan);
-
-    /* ─────────────────────────────
-       HANDLE CHECKBOXES
+       HANDLE EXPLICIT TUCIBIL CONSENT
     ───────────────────────────── */
     try {
-      const checkboxes = await page.$$('input[type="checkbox"]');
-      for (const cb of checkboxes) {
-        const checked = await page.evaluate(
-          el => el.checked,
-          cb
-        );
-        if (!checked) {
-          await cb.click();
-          await delay(500);
-        }
+      const consentSelector = 'input[name="consentStatement"]';
+      await page.waitForSelector(consentSelector, { timeout: 5000 });
+      const isChecked = await page.evaluate(el => el.checked, await page.$(consentSelector));
+      
+      if (!isChecked) {
+        // Force click element layout directly in case click interceptors fail
+        await page.evaluate(() => document.querySelector('input[name="consentStatement"]').click());
+        console.log('[fill-form] Checkbox handled');
       }
-      console.log('[fill-form] Checkbox handled');
     } catch (e) {
-      console.log('[fill-form] Checkbox not found');
+      console.log('[fill-form] Consent Checkbox tracking exception:', e.message);
     }
 
     await delay(1500);
 
     /* ─────────────────────────────
-       CLICK SUBMIT
+       CLICK SUBMIT (Explicit Class Match)
     ───────────────────────────── */
-    const clicked = await clickButton(page);
-
-    if (!clicked) {
-      throw new Error('Submit button not found');
-    }
+    const submitBtnSelector = 'button.btn_cibil_credit_score';
+    await page.waitForSelector(submitBtnSelector, { timeout: 5000 });
+    await page.click(submitBtnSelector);
+    console.log('✓ Clicked button: Check Credit Score');
 
     console.log('[fill-form] Waiting for OTP screen...');
-
-    await delay(6000);
+    
+    // Explicitly verify modal frame container initialization
+    await page.waitForSelector('div[class*="popUpWindow"]', { timeout: 15000 });
 
     sessions[sessionId] = {
       browser,
@@ -219,28 +202,27 @@ app.post('/api/submit-otp', async (req, res) => {
   const { browser, page } = session;
 
   try {
-    const inputs = await page.$$('input');
-    let otpFilled = false;
-
-    for (const input of inputs) {
-      try {
-        await input.click({
-          clickCount: 3
-        });
-        await input.type(otp, {
-          delay: 80
-        });
-        otpFilled = true;
-        break;
-      } catch (e) {}
+    const digits = otp.split('');
+    if (digits.length !== 6) {
+      throw new Error("Invalid OTP length. Requires 6 digits.");
     }
 
-    if (!otpFilled) {
-      throw new Error('OTP input not found');
+    // Sequentially fill input[name="otp1"] through input[name="otp6"]
+    for (let i = 0; i < 6; i++) {
+      const fieldSelector = `input[name="otp${i + 1}"]`;
+      await page.waitForSelector(fieldSelector, { timeout: 3000 });
+      await page.focus(fieldSelector);
+      await page.keyboard.press('Backspace'); 
+      await page.type(fieldSelector, digits[i], { delay: 50 });
     }
+    console.log('✓ Filled individual sequential OTP arrays');
 
     await delay(1000);
-    await clickButton(page);
+    
+    // Targeted verification click matching popup module structure
+    const verifyBtnSelector = 'div[class*="thanksMessage"] button';
+    await page.click(verifyBtnSelector);
+    console.log('✓ Clicked button: Submit OTP');
 
     console.log('[submit-otp] Waiting for score page...');
     await delay(8000);
@@ -311,6 +293,7 @@ app.post('/api/resend-otp', async (req, res) => {
   }
 
   try {
+    // Falls back to global loop logic to catch changing dynamic positions safely
     await clickButton(session.page);
     res.json({
       success: true
@@ -329,6 +312,7 @@ app.post('/api/resend-otp', async (req, res) => {
 async function fillField(page, selectors, value) {
   for (const selector of selectors) {
     try {
+      await page.waitForSelector(selector, { timeout: 5000 });
       const el = await page.$(selector);
       if (el) {
         await el.click({
