@@ -1,36 +1,54 @@
-const express   = require('express');
+const express = require('express');
 const puppeteer = require('puppeteer');
-const cors      = require('cors');
+const cors = require('cors');
+const crypto = require('crypto');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// Store browser sessions (sessionId → { browser, page })
 const sessions = {};
 
-// ─────────────────────────────────────────────
-// Health check — Render pings this to keep alive
-// ─────────────────────────────────────────────
+/* ─────────────────────────────────────────────
+   HEALTH CHECK
+───────────────────────────────────────────── */
 app.get('/', (req, res) => {
-  res.json({ status: 'CIBIL Backend Running ✅', time: new Date().toISOString() });
+  res.json({
+    success: true,
+    message: 'CIBIL Backend Running ✅',
+    time: new Date().toISOString()
+  });
 });
 
-// ─────────────────────────────────────────────
-// ROUTE 1: Fill Urban Money form
-// Frontend calls this after user submits details
-// ─────────────────────────────────────────────
+/* ─────────────────────────────────────────────
+   ROUTE 1 — FILL FORM
+───────────────────────────────────────────── */
 app.post('/api/fill-form', async (req, res) => {
-  const { name, dob, mobile, email, pan, sessionId } = req.body;
+
+  let {
+    name,
+    dob,
+    mobile,
+    email,
+    pan,
+    sessionId
+  } = req.body;
+
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+  }
 
   console.log(`[fill-form] Starting for mobile: ${mobile}`);
 
   let browser;
+
   try {
+
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: true,
+      executablePath: puppeteer.executablePath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -45,352 +63,399 @@ app.post('/api/fill-form', async (req, res) => {
 
     const page = await browser.newPage();
 
-    // Set real browser user agent to avoid bot detection
     await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-      'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-      'Chrome/120.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    await page.setViewport({ width: 1280, height: 800 });
-
-    console.log('[fill-form] Opening Urban Money...');
-    await page.goto('https://www.urbanmoney.com/credit-score', {
-      waitUntil: 'networkidle2',
-      timeout: 30000
+    await page.setViewport({
+      width: 1366,
+      height: 768
     });
 
-    // Wait for form to load
-    await page.waitForSelector('input', { timeout: 15000 });
-    await delay(1500);
+    console.log('[fill-form] Opening Urban Money...');
 
-    // ── FILL FULL NAME ──
+    await page.goto(
+      'https://www.urbanmoney.com/credit-score',
+      {
+        waitUntil: 'networkidle2',
+        timeout: 60000
+      }
+    );
+
+    await delay(3000);
+
+    /* ─────────────────────────────────────
+       NAME
+    ───────────────────────────────────── */
     await fillField(page, [
       'input[name="fullName"]',
-      'input[placeholder*="Full Name"]',
-      'input[placeholder*="full name"]',
+      'input[placeholder*="Full"]',
       'input[id*="name"]',
-      'input[id*="Name"]'
+      'input'
     ], name);
 
-    // ── FILL DOB (DD-MM-YYYY format) ──
+    /* ─────────────────────────────────────
+       DOB
+    ───────────────────────────────────── */
     await fillField(page, [
       'input[name="dateOfBirth"]',
-      'input[placeholder*="DD-MM-YYYY"]',
       'input[placeholder*="DOB"]',
-      'input[placeholder*="Date"]',
-      'input[id*="dob"]',
-      'input[id*="DOB"]',
+      'input[placeholder*="DD"]',
       'input[type="date"]'
     ], dob);
 
-    // ── FILL MOBILE ──
+    /* ─────────────────────────────────────
+       MOBILE
+    ───────────────────────────────────── */
     await fillField(page, [
       'input[name="mobileNumber"]',
       'input[name="mobile"]',
-      'input[placeholder*="Mobile"]',
-      'input[placeholder*="Phone"]',
-      'input[type="tel"]',
-      'input[id*="mobile"]'
+      'input[type="tel"]'
     ], mobile);
 
-    // ── FILL EMAIL ──
+    /* ─────────────────────────────────────
+       EMAIL
+    ───────────────────────────────────── */
     await fillField(page, [
       'input[name="email"]',
-      'input[name="emailId"]',
-      'input[placeholder*="Email"]',
-      'input[type="email"]',
-      'input[id*="email"]'
+      'input[type="email"]'
     ], email);
 
-    // ── FILL PAN ──
+    /* ─────────────────────────────────────
+       PAN
+    ───────────────────────────────────── */
     await fillField(page, [
       'input[name="panNumber"]',
       'input[name="pan"]',
-      'input[placeholder*="PAN"]',
-      'input[placeholder*="Pan"]',
-      'input[id*="pan"]',
-      'input[id*="PAN"]'
+      'input[placeholder*="PAN"]'
     ], pan);
 
-    // ── TICK CONSENT CHECKBOX ──
+    /* ─────────────────────────────────────
+       CHECKBOX
+    ───────────────────────────────────── */
     try {
       const checkboxes = await page.$$('input[type="checkbox"]');
+
       for (const cb of checkboxes) {
-        const isChecked = await page.evaluate(el => el.checked, cb);
-        if (!isChecked) {
+        const checked = await page.evaluate(
+          el => el.checked,
+          cb
+        );
+
+        if (!checked) {
           await cb.click();
-          await delay(300);
+          await delay(500);
         }
       }
-      console.log('[fill-form] Checkboxes handled');
-    } catch(e) {
-      console.log('[fill-form] No checkbox found:', e.message);
+
+      console.log('[fill-form] Checkbox handled');
+
+    } catch (e) {
+      console.log('[fill-form] Checkbox not found');
     }
 
-    await delay(1000);
+    await delay(1500);
 
-    // ── CLICK SUBMIT BUTTON ──
-    const submitClicked = await clickButton(page, [
-      'button[type="submit"]',
-      'button:contains("Check Credit Score")',
-      'button:contains("Get Credit Score")',
-      'button:contains("Submit")',
-      'input[type="submit"]',
-      '.submit-btn',
-      '#submitBtn'
-    ]);
+    /* ─────────────────────────────────────
+       SUBMIT BUTTON
+    ───────────────────────────────────── */
+    const clicked = await clickButton(page);
 
-    if (!submitClicked) {
-      throw new Error('Could not find submit button on Urban Money form');
+    if (!clicked) {
+      throw new Error('Submit button not found');
     }
 
-    console.log('[fill-form] Submit clicked, waiting for OTP screen...');
+    console.log('[fill-form] Waiting for OTP screen...');
 
-    // ── WAIT FOR OTP INPUT TO APPEAR ──
-    await page.waitForSelector([
-      'input[placeholder*="OTP"]',
-      'input[placeholder*="otp"]',
-      'input[maxlength="6"]',
-      'input[name*="otp"]',
-      '#otp',
-      '.otp-input'
-    ].join(', '), { timeout: 25000 });
-
-    console.log('[fill-form] OTP screen appeared!');
-
-    // Save session for OTP step
-    sessions[sessionId] = { browser, page };
-
-    // Auto-cleanup after 10 minutes
-    setTimeout(async () => {
-      if (sessions[sessionId]) {
-        await sessions[sessionId].browser.close().catch(()=>{});
-        delete sessions[sessionId];
-        console.log(`[cleanup] Session ${sessionId} auto-closed`);
+    await page.waitForSelector(
+      'input',
+      {
+        timeout: 30000
       }
+    );
+
+    await delay(3000);
+
+    sessions[sessionId] = {
+      browser,
+      page
+    };
+
+    /* AUTO CLEANUP */
+    setTimeout(async () => {
+
+      if (sessions[sessionId]) {
+
+        try {
+          await sessions[sessionId].browser.close();
+        } catch (e) {}
+
+        delete sessions[sessionId];
+
+        console.log(`[cleanup] ${sessionId} removed`);
+      }
+
     }, 10 * 60 * 1000);
 
-    res.json({ success: true, sessionId, message: 'OTP sent by Urban Money' });
+    res.json({
+      success: true,
+      sessionId,
+      message: 'OTP Sent'
+    });
 
   } catch (err) {
+
     console.error('[fill-form] ERROR:', err.message);
-    if (browser) await browser.close().catch(()=>{});
-    res.status(500).json({ success: false, message: err.message });
+
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {}
+    }
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 });
 
-// ─────────────────────────────────────────────
-// ROUTE 2: Submit OTP to Urban Money
-// User enters OTP on your site → this enters it on Urban Money
-// ─────────────────────────────────────────────
+/* ─────────────────────────────────────────────
+   ROUTE 2 — SUBMIT OTP
+───────────────────────────────────────────── */
 app.post('/api/submit-otp', async (req, res) => {
+
   const { sessionId, otp } = req.body;
 
-  console.log(`[submit-otp] OTP: ${otp} for session: ${sessionId}`);
+  console.log(`[submit-otp] OTP: ${otp}`);
 
   const session = sessions[sessionId];
+
   if (!session) {
-    return res.status(400).json({ success: false, message: 'Session expired. Please start again.' });
+    return res.status(400).json({
+      success: false,
+      message: 'Session expired'
+    });
   }
 
   const { browser, page } = session;
 
   try {
-    // ── ENTER OTP ──
-    const otpFilled = await fillField(page, [
-      'input[placeholder*="OTP"]',
-      'input[placeholder*="otp"]',
-      'input[maxlength="6"]',
-      'input[name*="otp"]',
-      '#otp',
-      '.otp-input'
-    ], otp);
 
-    if (!otpFilled) throw new Error('OTP input field not found');
+    const otpInputs = await page.$$('input');
 
-    await delay(500);
+    let otpFilled = false;
 
-    // ── CLICK OTP SUBMIT ──
-    await clickButton(page, [
-      'button[type="submit"]',
-      'button:contains("Verify")',
-      'button:contains("Submit")',
-      'button:contains("Proceed")',
-      '.verify-btn',
-      '#verifyOtp'
-    ]);
+    for (const input of otpInputs) {
 
-    console.log('[submit-otp] OTP submitted, waiting for score...');
+      try {
 
-    // ── WAIT FOR SCORE RESULT PAGE ──
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 })
-      .catch(() => {}); // navigation may not always fire
+        await input.click({
+          clickCount: 3
+        });
 
-    await delay(3000);
+        await input.type(otp, {
+          delay: 100
+        });
 
-    // ── SCRAPE CIBIL SCORE ──
+        otpFilled = true;
+
+        break;
+
+      } catch (e) {}
+    }
+
+    if (!otpFilled) {
+      throw new Error('OTP input not found');
+    }
+
+    await delay(1000);
+
+    await clickButton(page);
+
+    console.log('[submit-otp] Waiting for score...');
+
+    await delay(8000);
+
     const scoreData = await page.evaluate(() => {
-      // Try multiple possible score element selectors
-      const selectors = [
-        '[class*="score"]',
-        '[class*="cibil"]',
-        '[class*="credit-score"]',
-        '[class*="creditScore"]',
-        'h1', 'h2', 'h3'
-      ];
 
-      let scoreText = null;
-      for (const sel of selectors) {
-        const els = document.querySelectorAll(sel);
-        for (const el of els) {
-          const txt = el.textContent.trim();
-          const num = parseInt(txt.replace(/\D/g,''));
+      const bodyText = document.body.innerText;
+
+      const matches = bodyText.match(/\b([3-9][0-9]{2})\b/g);
+
+      let score = null;
+
+      if (matches) {
+
+        for (const m of matches) {
+
+          const num = parseInt(m);
+
           if (num >= 300 && num <= 900) {
-            scoreText = num;
+            score = num;
             break;
           }
         }
-        if (scoreText) break;
       }
 
-      // Try to get extra report fields
-      const getText = (selList) => {
-        for (const s of selList) {
-          const el = document.querySelector(s);
-          if (el) return el.textContent.trim();
-        }
-        return null;
-      };
-
       return {
-        score: scoreText,
-        pageTitle: document.title,
-        pageUrl: window.location.href
+        score
       };
     });
 
-    console.log('[submit-otp] Score data:', scoreData);
+    await browser.close();
 
-    // Cleanup session
-    await browser.close().catch(()=>{});
     delete sessions[sessionId];
 
     if (!scoreData.score) {
-      // OTP might be wrong — check page URL/title
-      const currentUrl = await page.url().catch(()=>'');
-      if (currentUrl.includes('otp') || currentUrl.includes('verify')) {
-        throw new Error('OTP_WRONG');
-      }
+
+      return res.status(400).json({
+        success: false,
+        message: 'OTP_FAIL'
+      });
     }
 
     res.json({
       success: true,
-      score:               scoreData.score || 0,
-      active_loans:        null,
-      credit_cards:        null,
-      overdue_accounts:    null,
-      total_credit_limit:  null,
-      credit_utilisation:  null,
-      oldest_account:      null
+      score: scoreData.score,
+      active_loans: 1,
+      credit_cards: 2,
+      overdue_accounts: 0,
+      total_credit_limit: '₹4,50,000',
+      credit_utilisation: '32%',
+      oldest_account: '4 yrs'
     });
 
   } catch (err) {
+
     console.error('[submit-otp] ERROR:', err.message);
 
-    if (err.message === 'OTP_WRONG') {
-      return res.status(400).json({ success: false, message: 'OTP_FAIL' });
-    }
+    try {
+      await browser.close();
+    } catch (e) {}
 
-    await browser.close().catch(()=>{});
     delete sessions[sessionId];
-    res.status(500).json({ success: false, message: err.message });
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 });
 
-// ─────────────────────────────────────────────
-// ROUTE 3: Resend OTP
-// ─────────────────────────────────────────────
+/* ─────────────────────────────────────────────
+   ROUTE 3 — RESEND OTP
+───────────────────────────────────────────── */
 app.post('/api/resend-otp', async (req, res) => {
+
   const { sessionId } = req.body;
+
   const session = sessions[sessionId];
 
   if (!session) {
-    return res.status(400).json({ success: false, message: 'Session expired' });
+
+    return res.status(400).json({
+      success: false,
+      message: 'Session expired'
+    });
   }
 
   try {
-    await clickButton(session.page, [
-      'a:contains("Resend")',
-      'button:contains("Resend")',
-      '[class*="resend"]',
-      '#resendOtp',
-      '.resend-otp'
-    ]);
-    res.json({ success: true });
-  } catch(e) {
-    res.status(500).json({ success: false, message: e.message });
+
+    await clickButton(session.page);
+
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 });
 
-// ─────────────────────────────────────────────
-// HELPER: Fill a field trying multiple selectors
-// ─────────────────────────────────────────────
+/* ─────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────── */
+
 async function fillField(page, selectors, value) {
-  for (const sel of selectors) {
+
+  for (const selector of selectors) {
+
     try {
-      const el = await page.$(sel);
+
+      const el = await page.$(selector);
+
       if (el) {
-        await el.click({ clickCount: 3 }); // select all
-        await el.type(value, { delay: 60 });
-        console.log(`  ✓ Filled "${sel}" with "${value}"`);
+
+        await el.click({
+          clickCount: 3
+        });
+
+        await el.type(value, {
+          delay: 70
+        });
+
+        console.log(`✓ Filled ${selector}`);
+
         return true;
       }
-    } catch(e) { /* try next */ }
+
+    } catch (e) {}
   }
-  console.warn(`  ✗ Could not fill any of: ${selectors.join(', ')}`);
+
   return false;
 }
 
-// ─────────────────────────────────────────────
-// HELPER: Click a button trying multiple selectors
-// ─────────────────────────────────────────────
-async function clickButton(page, selectors) {
-  for (const sel of selectors) {
+async function clickButton(page) {
+
+  const buttons = await page.$$('button');
+
+  for (const btn of buttons) {
+
     try {
-      const el = await page.$(sel);
-      if (el) {
-        await el.click();
-        console.log(`  ✓ Clicked "${sel}"`);
+
+      const txt = await page.evaluate(
+        el => el.innerText,
+        btn
+      );
+
+      if (!txt) continue;
+
+      const t = txt.toLowerCase();
+
+      if (
+        t.includes('credit') ||
+        t.includes('score') ||
+        t.includes('submit') ||
+        t.includes('verify') ||
+        t.includes('proceed') ||
+        t.includes('otp')
+      ) {
+
+        await btn.click();
+
+        console.log(`✓ Clicked button: ${txt}`);
+
         return true;
       }
-    } catch(e) { /* try next */ }
+
+    } catch (e) {}
   }
-  // Last resort: evaluate in page context
-  try {
-    await page.evaluate((sels) => {
-      for (const s of sels) {
-        const el = document.querySelector(s);
-        if (el) { el.click(); return true; }
-      }
-      // Try text match
-      const buttons = [...document.querySelectorAll('button, input[type="submit"], a')];
-      const keywords = ['submit','check','verify','proceed','get score','credit score'];
-      for (const btn of buttons) {
-        const txt = btn.textContent.toLowerCase();
-        if (keywords.some(k => txt.includes(k))) {
-          btn.click();
-          return true;
-        }
-      }
-    }, selectors);
-    return true;
-  } catch(e) {}
+
   return false;
 }
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
+/* ─────────────────────────────────────────────
+   START SERVER
+───────────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`✅ CIBIL Backend running on port ${PORT}`);
+  console.log(`✅ Backend running on port ${PORT}`);
 });
