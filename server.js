@@ -2,7 +2,6 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const cors = require('cors');
 const crypto = require('crypto');
-const path = require('path'); // Added for handling cache paths cleanly
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -48,11 +47,10 @@ app.post('/api/fill-form', async (req, res) => {
   let browser;
 
   try {
-    // MODIFIED: Added specific options to make Puppeteer run in Render's environment
+    // Puppeteer automatically resolves the browser path using your 
+    // PUPPETEER_CACHE_DIR environment variable on Render.
     browser = await puppeteer.launch({
       headless: true,
-      // Render installs the Chrome binary here if you use the environment variable
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, 
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
