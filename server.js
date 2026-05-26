@@ -2,6 +2,7 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const cors = require('cors');
 const crypto = require('crypto');
+const path = require('path'); // Added for handling cache paths cleanly
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,7 +30,6 @@ app.get('/', (req, res) => {
    ROUTE 1 — FILL FORM
 ───────────────────────────────────────────── */
 app.post('/api/fill-form', async (req, res) => {
-
   let {
     name,
     dob,
@@ -48,9 +48,11 @@ app.post('/api/fill-form', async (req, res) => {
   let browser;
 
   try {
-
+    // MODIFIED: Added specific options to make Puppeteer run in Render's environment
     browser = await puppeteer.launch({
       headless: true,
+      // Render installs the Chrome binary here if you use the environment variable
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, 
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -58,7 +60,6 @@ app.post('/api/fill-form', async (req, res) => {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--single-process',
         '--disable-gpu'
       ]
     });
@@ -135,24 +136,18 @@ app.post('/api/fill-form', async (req, res) => {
        HANDLE CHECKBOXES
     ───────────────────────────── */
     try {
-
       const checkboxes = await page.$$('input[type="checkbox"]');
-
       for (const cb of checkboxes) {
-
         const checked = await page.evaluate(
           el => el.checked,
           cb
         );
-
         if (!checked) {
           await cb.click();
           await delay(500);
         }
       }
-
       console.log('[fill-form] Checkbox handled');
-
     } catch (e) {
       console.log('[fill-form] Checkbox not found');
     }
@@ -179,18 +174,13 @@ app.post('/api/fill-form', async (req, res) => {
 
     /* AUTO CLEANUP */
     setTimeout(async () => {
-
       if (sessions[sessionId]) {
-
         try {
           await sessions[sessionId].browser.close();
         } catch (e) {}
-
         delete sessions[sessionId];
-
         console.log(`[cleanup] ${sessionId} removed`);
       }
-
     }, 10 * 60 * 1000);
 
     res.json({
@@ -200,16 +190,12 @@ app.post('/api/fill-form', async (req, res) => {
     });
 
   } catch (err) {
-
     console.error('[fill-form] ERROR:', err.message);
-
     if (browser) {
-
       try {
         await browser.close();
       } catch (e) {}
     }
-
     res.status(500).json({
       success: false,
       message: err.message
@@ -221,15 +207,11 @@ app.post('/api/fill-form', async (req, res) => {
    ROUTE 2 — SUBMIT OTP
 ───────────────────────────────────────────── */
 app.post('/api/submit-otp', async (req, res) => {
-
   const { sessionId, otp } = req.body;
-
   console.log(`[submit-otp] OTP: ${otp}`);
 
   const session = sessions[sessionId];
-
   if (!session) {
-
     return res.status(400).json({
       success: false,
       message: 'Session expired'
@@ -239,27 +221,19 @@ app.post('/api/submit-otp', async (req, res) => {
   const { browser, page } = session;
 
   try {
-
     const inputs = await page.$$('input');
-
     let otpFilled = false;
 
     for (const input of inputs) {
-
       try {
-
         await input.click({
           clickCount: 3
         });
-
         await input.type(otp, {
           delay: 80
         });
-
         otpFilled = true;
-
         break;
-
       } catch (e) {}
     }
 
@@ -268,43 +242,32 @@ app.post('/api/submit-otp', async (req, res) => {
     }
 
     await delay(1000);
-
     await clickButton(page);
 
     console.log('[submit-otp] Waiting for score page...');
-
     await delay(8000);
 
     const scoreData = await page.evaluate(() => {
-
       const txt = document.body.innerText;
-
       const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
-
       let score = null;
 
       if (matches) {
-
         for (const m of matches) {
-
           const n = parseInt(m);
-
           if (n >= 300 && n <= 900) {
             score = n;
             break;
           }
         }
       }
-
       return { score };
     });
 
     await browser.close();
-
     delete sessions[sessionId];
 
     if (!scoreData.score) {
-
       return res.status(400).json({
         success: false,
         message: 'OTP_FAIL'
@@ -323,15 +286,11 @@ app.post('/api/submit-otp', async (req, res) => {
     });
 
   } catch (err) {
-
     console.error('[submit-otp] ERROR:', err.message);
-
     try {
       await browser.close();
     } catch (e) {}
-
     delete sessions[sessionId];
-
     res.status(500).json({
       success: false,
       message: err.message
@@ -343,13 +302,10 @@ app.post('/api/submit-otp', async (req, res) => {
    ROUTE 3 — RESEND OTP
 ───────────────────────────────────────────── */
 app.post('/api/resend-otp', async (req, res) => {
-
   const { sessionId } = req.body;
-
   const session = sessions[sessionId];
 
   if (!session) {
-
     return res.status(400).json({
       success: false,
       message: 'Session expired'
@@ -357,15 +313,11 @@ app.post('/api/resend-otp', async (req, res) => {
   }
 
   try {
-
     await clickButton(session.page);
-
     res.json({
       success: true
     });
-
   } catch (err) {
-
     res.status(500).json({
       success: false,
       message: err.message
@@ -377,33 +329,22 @@ app.post('/api/resend-otp', async (req, res) => {
    HELPER — FILL FIELD
 ───────────────────────────────────────────── */
 async function fillField(page, selectors, value) {
-
   for (const selector of selectors) {
-
     try {
-
       const el = await page.$(selector);
-
       if (el) {
-
         await el.click({
           clickCount: 3
         });
-
         await el.type(value, {
           delay: 70
         });
-
         console.log(`✓ Filled ${selector}`);
-
         return true;
       }
-
     } catch (e) {}
   }
-
   console.log(`✗ Could not fill field`);
-
   return false;
 }
 
@@ -411,20 +352,14 @@ async function fillField(page, selectors, value) {
    HELPER — CLICK BUTTON
 ───────────────────────────────────────────── */
 async function clickButton(page) {
-
   const buttons = await page.$$('button');
-
   for (const btn of buttons) {
-
     try {
-
       const txt = await page.evaluate(
         el => el.innerText,
         btn
       );
-
       if (!txt) continue;
-
       const t = txt.toLowerCase();
 
       if (
@@ -435,17 +370,12 @@ async function clickButton(page) {
         t.includes('proceed') ||
         t.includes('otp')
       ) {
-
         await btn.click();
-
         console.log(`✓ Clicked button: ${txt}`);
-
         return true;
       }
-
     } catch (e) {}
   }
-
   return false;
 }
 
