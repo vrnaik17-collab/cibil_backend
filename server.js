@@ -9,6 +9,9 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+/* ─────────────────────────────────────────────
+   STORE ACTIVE SESSIONS
+───────────────────────────────────────────── */
 const sessions = {};
 
 /* ─────────────────────────────────────────────
@@ -48,7 +51,6 @@ app.post('/api/fill-form', async (req, res) => {
 
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: puppeteer.executablePath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -63,14 +65,14 @@ app.post('/api/fill-form', async (req, res) => {
 
     const page = await browser.newPage();
 
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
     await page.setViewport({
       width: 1366,
       height: 768
     });
+
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
+    );
 
     console.log('[fill-form] Opening Urban Money...');
 
@@ -84,9 +86,9 @@ app.post('/api/fill-form', async (req, res) => {
 
     await delay(3000);
 
-    /* ─────────────────────────────────────
-       NAME
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       FILL NAME
+    ───────────────────────────── */
     await fillField(page, [
       'input[name="fullName"]',
       'input[placeholder*="Full"]',
@@ -94,49 +96,50 @@ app.post('/api/fill-form', async (req, res) => {
       'input'
     ], name);
 
-    /* ─────────────────────────────────────
-       DOB
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       FILL DOB
+    ───────────────────────────── */
     await fillField(page, [
       'input[name="dateOfBirth"]',
       'input[placeholder*="DOB"]',
-      'input[placeholder*="DD"]',
       'input[type="date"]'
     ], dob);
 
-    /* ─────────────────────────────────────
-       MOBILE
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       FILL MOBILE
+    ───────────────────────────── */
     await fillField(page, [
-      'input[name="mobileNumber"]',
       'input[name="mobile"]',
+      'input[name="mobileNumber"]',
       'input[type="tel"]'
     ], mobile);
 
-    /* ─────────────────────────────────────
-       EMAIL
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       FILL EMAIL
+    ───────────────────────────── */
     await fillField(page, [
       'input[name="email"]',
       'input[type="email"]'
     ], email);
 
-    /* ─────────────────────────────────────
-       PAN
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       FILL PAN
+    ───────────────────────────── */
     await fillField(page, [
-      'input[name="panNumber"]',
       'input[name="pan"]',
+      'input[name="panNumber"]',
       'input[placeholder*="PAN"]'
     ], pan);
 
-    /* ─────────────────────────────────────
-       CHECKBOX
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       HANDLE CHECKBOXES
+    ───────────────────────────── */
     try {
+
       const checkboxes = await page.$$('input[type="checkbox"]');
 
       for (const cb of checkboxes) {
+
         const checked = await page.evaluate(
           el => el.checked,
           cb
@@ -156,9 +159,9 @@ app.post('/api/fill-form', async (req, res) => {
 
     await delay(1500);
 
-    /* ─────────────────────────────────────
-       SUBMIT BUTTON
-    ───────────────────────────────────── */
+    /* ─────────────────────────────
+       CLICK SUBMIT
+    ───────────────────────────── */
     const clicked = await clickButton(page);
 
     if (!clicked) {
@@ -167,14 +170,7 @@ app.post('/api/fill-form', async (req, res) => {
 
     console.log('[fill-form] Waiting for OTP screen...');
 
-    await page.waitForSelector(
-      'input',
-      {
-        timeout: 30000
-      }
-    );
-
-    await delay(3000);
+    await delay(6000);
 
     sessions[sessionId] = {
       browser,
@@ -208,6 +204,7 @@ app.post('/api/fill-form', async (req, res) => {
     console.error('[fill-form] ERROR:', err.message);
 
     if (browser) {
+
       try {
         await browser.close();
       } catch (e) {}
@@ -232,6 +229,7 @@ app.post('/api/submit-otp', async (req, res) => {
   const session = sessions[sessionId];
 
   if (!session) {
+
     return res.status(400).json({
       success: false,
       message: 'Session expired'
@@ -242,11 +240,11 @@ app.post('/api/submit-otp', async (req, res) => {
 
   try {
 
-    const otpInputs = await page.$$('input');
+    const inputs = await page.$$('input');
 
     let otpFilled = false;
 
-    for (const input of otpInputs) {
+    for (const input of inputs) {
 
       try {
 
@@ -255,7 +253,7 @@ app.post('/api/submit-otp', async (req, res) => {
         });
 
         await input.type(otp, {
-          delay: 100
+          delay: 80
         });
 
         otpFilled = true;
@@ -273,15 +271,15 @@ app.post('/api/submit-otp', async (req, res) => {
 
     await clickButton(page);
 
-    console.log('[submit-otp] Waiting for score...');
+    console.log('[submit-otp] Waiting for score page...');
 
     await delay(8000);
 
     const scoreData = await page.evaluate(() => {
 
-      const bodyText = document.body.innerText;
+      const txt = document.body.innerText;
 
-      const matches = bodyText.match(/\b([3-9][0-9]{2})\b/g);
+      const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
 
       let score = null;
 
@@ -289,18 +287,16 @@ app.post('/api/submit-otp', async (req, res) => {
 
         for (const m of matches) {
 
-          const num = parseInt(m);
+          const n = parseInt(m);
 
-          if (num >= 300 && num <= 900) {
-            score = num;
+          if (n >= 300 && n <= 900) {
+            score = n;
             break;
           }
         }
       }
 
-      return {
-        score
-      };
+      return { score };
     });
 
     await browser.close();
@@ -378,9 +374,8 @@ app.post('/api/resend-otp', async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────
-   HELPERS
+   HELPER — FILL FIELD
 ───────────────────────────────────────────── */
-
 async function fillField(page, selectors, value) {
 
   for (const selector of selectors) {
@@ -407,9 +402,14 @@ async function fillField(page, selectors, value) {
     } catch (e) {}
   }
 
+  console.log(`✗ Could not fill field`);
+
   return false;
 }
 
+/* ─────────────────────────────────────────────
+   HELPER — CLICK BUTTON
+───────────────────────────────────────────── */
 async function clickButton(page) {
 
   const buttons = await page.$$('button');
@@ -449,6 +449,9 @@ async function clickButton(page) {
   return false;
 }
 
+/* ─────────────────────────────────────────────
+   DELAY
+───────────────────────────────────────────── */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
