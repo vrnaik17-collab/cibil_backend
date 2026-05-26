@@ -62,13 +62,13 @@ app.post('/api/fill-form', async (req, res) => {
 
     const page = await browser.newPage();
 
-    // Emulate a standard desktop viewpoint
+    // Emulate standard desktop view
     await page.setViewport({
       width: 1366,
       height: 768
     });
 
-    // Mask the automated browser identity using a standard User-Agent string
+    // Mask the automated browser identity
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
     );
@@ -91,7 +91,7 @@ app.post('/api/fill-form', async (req, res) => {
     // 1. Full Name
     await fillField(page, ['input[name="fullName"]'], name);
 
-    // 2. Date of Birth (Bypasses readonly attribute to type value directly)
+    // 2. Date of Birth (Bypasses readonly attribute to inject value directly)
     try {
       await page.waitForSelector('input[name="dob"]', { visible: true, timeout: 5000 });
       await page.evaluate((dobValue) => {
@@ -114,7 +114,7 @@ app.post('/api/fill-form', async (req, res) => {
     // 4. Email Address
     await fillField(page, ['input[name="email"]'], email);
 
-    // 5. PAN Card Number (Converts characters to upper case structure)
+    // 5. PAN Card Number (Converts string elements to Upper Case)
     await fillField(page, ['input[name="panCard"]'], pan.toUpperCase());
 
     /* ─────────────────────────────────────────────
@@ -126,7 +126,6 @@ app.post('/api/fill-form', async (req, res) => {
       const isChecked = await page.evaluate(el => el.checked, await page.$(consentSelector));
       
       if (!isChecked) {
-        // Trigger a native DOM click injection to handle hidden layout layers
         await page.evaluate(() => document.querySelector('input[name="consentStatement"]').click());
         console.log('[fill-form] Checkbox handled');
       }
@@ -137,37 +136,71 @@ app.post('/api/fill-form', async (req, res) => {
     await delay(1500);
 
     /* ─────────────────────────────────────────────
-       CLICK SUBMIT (Humanized Coordination)
+       CLICK SUBMIT & FORCE VALIDATION (Bypasses State Lock)
     ───────────────────────────────────────────── */
     const submitBtnSelector = 'button.btn_cibil_credit_score';
     await page.waitForSelector(submitBtnSelector, { visible: true, timeout: 5000 });
 
-    // Scroll smoothly to target element layout area
+    // Forces structural framework frameworks to capture input parameters before click events
+    await page.evaluate(() => {
+      const inputs = document.querySelectorAll('.formInput, .form-check-input');
+      inputs.forEach(input => {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('blur', { bubbles: true }));
+      });
+    });
+    await delay(500);
+
+    // Scroll smoothly to target layout space
     await page.evaluate((sel) => {
       document.querySelector(sel).scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, submitBtnSelector);
     await delay(1000);
 
-    // Hover over button element to trigger tracking framework event hooks
+    // Hover to trigger mouse tracking validation event scripts
     const submitButtonHandle = await page.$(submitBtnSelector);
     await submitButtonHandle.hover();
     await delay(200);
-
-    // Direct structural click action simulation
     await page.click(submitBtnSelector);
     console.log('✓ Clicked button via coordinate hover: Check Credit Score');
 
+    // FALLBACK: Directly fire form submission via DOM if the physical click is intercepted
+    await delay(2000);
+    const modalVisible = await page.evaluate(() => {
+      return !!document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox');
+    });
+
+    if (!modalVisible) {
+      console.log('⚠️ Modal not visible via click, forcing direct DOM form submission execution...');
+      await page.evaluate(() => {
+        const inputField = document.querySelector('input[name="fullName"]');
+        if (inputField && inputField.form) {
+          inputField.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+      });
+    }
+
     console.log('[fill-form] Waiting for OTP screen...');
     
-    // Explicit verification block tracking modal frame visibility
-    await page.waitForSelector('div[class*="popUpWindow"]', { visible: true, timeout: 15000 });
+    // Flexible wait tracking hidden visibility classes or modal creation
+    await page.waitForFunction(() => {
+      const modal = document.querySelector('div[class*="popUpWindow"], .OtpPopUp-module__CX5d0G__popUpBox, div[class*="thanksMessage"]');
+      if (modal) {
+        const style = window.getComputedStyle(modal);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      }
+      return false;
+    }, { timeout: 20000 });
+
+    console.log('✓ OTP Modal detected successfully.');
 
     sessions[sessionId] = {
       browser,
       page
     };
 
-    /* AUTO CLEANUP (Discard stale sessions after 10 minutes) */
+    /* AUTO CLEANUP (Stale session collector running at 10 minutes) */
     setTimeout(async () => {
       if (sessions[sessionId]) {
         try {
@@ -221,13 +254,12 @@ app.post('/api/submit-otp', async (req, res) => {
       throw new Error("Invalid OTP length. Requires exactly 6 digits.");
     }
 
-    // Iterates across sequential individual input parameters (otp1 -> otp6)
+    // Iterates across split input frames sequentially (otp1 -> otp6)
     for (let i = 0; i < 6; i++) {
       const fieldSelector = `input[name="otp${i + 1}"]`;
       await page.waitForSelector(fieldSelector, { visible: true, timeout: 5000 });
       await page.focus(fieldSelector);
       
-      // Clear values inside field safely before typing values
       await page.keyboard.press('Backspace'); 
       await page.type(fieldSelector, digits[i], { delay: 50 });
     }
@@ -235,16 +267,16 @@ app.post('/api/submit-otp', async (req, res) => {
 
     await delay(1000);
     
-    // Target submission action inside verification context block explicitly
+    // Explicit selection matching targeted button elements within the modal popup module context
     const verifyBtnSelector = 'div[class*="thanksMessage"] button';
     await page.waitForSelector(verifyBtnSelector, { visible: true, timeout: 5000 });
     await page.click(verifyBtnSelector);
     console.log('✓ Clicked button: Submit OTP');
 
     console.log('[submit-otp] Waiting for score page...');
-    await delay(10000); // Gives content layout adequate time to fetch report data strings
+    await delay(10000); // Wait interval allowed for generation of dashboard report arrays
 
-    // Regex extraction block pulling structural CIBIL data patterns matching numerical credit limits
+    // Extraction parsing loops extracting numerical characters mimicking report formats
     const scoreData = await page.evaluate(() => {
       const txt = document.body.innerText;
       const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
@@ -311,7 +343,7 @@ app.post('/api/resend-otp', async (req, res) => {
   }
 
   try {
-    const resendSelector = 'span.OtpPopUp-module__CX5d0G__close'; // Re-evaluates target close/resend links
+    const resendSelector = 'span.OtpPopUp-module__CX5d0G__close';
     await session.page.click(resendSelector);
     res.json({
       success: true
@@ -333,7 +365,6 @@ async function fillField(page, selectors, value) {
       await page.waitForSelector(selector, { visible: true, timeout: 5000 });
       const el = await page.$(selector);
       if (el) {
-        // Move viewport safely to align layout elements
         await page.evaluate(element => element.scrollIntoView({ block: 'center' }), el);
         await el.focus();
         
@@ -341,13 +372,13 @@ async function fillField(page, selectors, value) {
         await page.keyboard.press('Backspace');
         await delay(100);
 
-        // Types content with random interval variances (Bypasses basic keystroke cadence monitoring bot check)
+        // Individual keystrokes added along with unpredictable intervals mimicking real human interactions
         for (const char of value.toString()) {
           await el.type(char);
           await delay(Math.floor(Math.random() * 60) + 40); 
         }
 
-        // Bubbles validation changes up to React / Next.js front-end context arrays
+        // Bubbles validation changes up into framework state arrays explicitly
         await page.evaluate(element => {
           element.dispatchEvent(new Event('input', { bubbles: true }));
           element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -359,7 +390,7 @@ async function fillField(page, selectors, value) {
       }
     } catch (e) {}
   }
-  console.log(`✗ Could not fill field inside provided configuration scope`);
+  console.log(`✗ Could not fill field inside structural configuration boundaries`);
   return false;
 }
 
