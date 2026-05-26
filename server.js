@@ -26,7 +26,7 @@ app.get('/', (req, res) => {
 });
 
 /* ─────────────────────────────────────────────
-   ROUTE 1 — FILL FORM
+   ROUTE 1 — FILL FORM & TRIGGER OTP
 ───────────────────────────────────────────── */
 app.post('/api/fill-form', async (req, res) => {
   let {
@@ -62,17 +62,18 @@ app.post('/api/fill-form', async (req, res) => {
 
     const page = await browser.newPage();
 
+    // Emulate a standard desktop viewpoint
     await page.setViewport({
       width: 1366,
       height: 768
     });
 
+    // Mask the automated browser identity using a standard User-Agent string
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
     );
 
     console.log('[fill-form] Opening Urban Money...');
-
     await page.goto(
       'https://www.urbanmoney.com/cibil-credit-score',
       {
@@ -84,15 +85,15 @@ app.post('/api/fill-form', async (req, res) => {
     await delay(3000);
 
     /* ─────────────────────────────────────────────
-       PRECISE DOM INTERACTION (TARGETED ROUTING)
+       PRECISE DOM INTERACTION & PARAMETER INJECTION
     ───────────────────────────────────────────── */
     
     // 1. Full Name
     await fillField(page, ['input[name="fullName"]'], name);
 
-    // 2. Date of Birth (Readonly mitigation via Evaluation)
+    // 2. Date of Birth (Bypasses readonly attribute to type value directly)
     try {
-      await page.waitForSelector('input[name="dob"]', { timeout: 5000 });
+      await page.waitForSelector('input[name="dob"]', { visible: true, timeout: 5000 });
       await page.evaluate((dobValue) => {
         const dobInput = document.querySelector('input[name="dob"]');
         if (dobInput) {
@@ -113,19 +114,19 @@ app.post('/api/fill-form', async (req, res) => {
     // 4. Email Address
     await fillField(page, ['input[name="email"]'], email);
 
-    // 5. PAN Card Number (Updated explicitly from 'pan' to 'panCard')
+    // 5. PAN Card Number (Converts characters to upper case structure)
     await fillField(page, ['input[name="panCard"]'], pan.toUpperCase());
 
-    /* ─────────────────────────────
-       HANDLE EXPLICIT TUCIBIL CONSENT
-    ───────────────────────────── */
+    /* ─────────────────────────────────────────────
+       HANDLE EXPLICIT TUCIBIL CONSENT CHECKBOX
+    ───────────────────────────────────────────── */
     try {
       const consentSelector = 'input[name="consentStatement"]';
       await page.waitForSelector(consentSelector, { timeout: 5000 });
       const isChecked = await page.evaluate(el => el.checked, await page.$(consentSelector));
       
       if (!isChecked) {
-        // Force click element layout directly in case click interceptors fail
+        // Trigger a native DOM click injection to handle hidden layout layers
         await page.evaluate(() => document.querySelector('input[name="consentStatement"]').click());
         console.log('[fill-form] Checkbox handled');
       }
@@ -135,25 +136,38 @@ app.post('/api/fill-form', async (req, res) => {
 
     await delay(1500);
 
-    /* ─────────────────────────────
-       CLICK SUBMIT (Explicit Class Match)
-    ───────────────────────────── */
+    /* ─────────────────────────────────────────────
+       CLICK SUBMIT (Humanized Coordination)
+    ───────────────────────────────────────────── */
     const submitBtnSelector = 'button.btn_cibil_credit_score';
-    await page.waitForSelector(submitBtnSelector, { timeout: 5000 });
+    await page.waitForSelector(submitBtnSelector, { visible: true, timeout: 5000 });
+
+    // Scroll smoothly to target element layout area
+    await page.evaluate((sel) => {
+      document.querySelector(sel).scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, submitBtnSelector);
+    await delay(1000);
+
+    // Hover over button element to trigger tracking framework event hooks
+    const submitButtonHandle = await page.$(submitBtnSelector);
+    await submitButtonHandle.hover();
+    await delay(200);
+
+    // Direct structural click action simulation
     await page.click(submitBtnSelector);
-    console.log('✓ Clicked button: Check Credit Score');
+    console.log('✓ Clicked button via coordinate hover: Check Credit Score');
 
     console.log('[fill-form] Waiting for OTP screen...');
     
-    // Explicitly verify modal frame container initialization
-    await page.waitForSelector('div[class*="popUpWindow"]', { timeout: 15000 });
+    // Explicit verification block tracking modal frame visibility
+    await page.waitForSelector('div[class*="popUpWindow"]', { visible: true, timeout: 15000 });
 
     sessions[sessionId] = {
       browser,
       page
     };
 
-    /* AUTO CLEANUP */
+    /* AUTO CLEANUP (Discard stale sessions after 10 minutes) */
     setTimeout(async () => {
       if (sessions[sessionId]) {
         try {
@@ -202,16 +216,18 @@ app.post('/api/submit-otp', async (req, res) => {
   const { browser, page } = session;
 
   try {
-    const digits = otp.split('');
+    const digits = otp.toString().split('');
     if (digits.length !== 6) {
-      throw new Error("Invalid OTP length. Requires 6 digits.");
+      throw new Error("Invalid OTP length. Requires exactly 6 digits.");
     }
 
-    // Sequentially fill input[name="otp1"] through input[name="otp6"]
+    // Iterates across sequential individual input parameters (otp1 -> otp6)
     for (let i = 0; i < 6; i++) {
       const fieldSelector = `input[name="otp${i + 1}"]`;
-      await page.waitForSelector(fieldSelector, { timeout: 3000 });
+      await page.waitForSelector(fieldSelector, { visible: true, timeout: 5000 });
       await page.focus(fieldSelector);
+      
+      // Clear values inside field safely before typing values
       await page.keyboard.press('Backspace'); 
       await page.type(fieldSelector, digits[i], { delay: 50 });
     }
@@ -219,14 +235,16 @@ app.post('/api/submit-otp', async (req, res) => {
 
     await delay(1000);
     
-    // Targeted verification click matching popup module structure
+    // Target submission action inside verification context block explicitly
     const verifyBtnSelector = 'div[class*="thanksMessage"] button';
+    await page.waitForSelector(verifyBtnSelector, { visible: true, timeout: 5000 });
     await page.click(verifyBtnSelector);
     console.log('✓ Clicked button: Submit OTP');
 
     console.log('[submit-otp] Waiting for score page...');
-    await delay(8000);
+    await delay(10000); // Gives content layout adequate time to fetch report data strings
 
+    // Regex extraction block pulling structural CIBIL data patterns matching numerical credit limits
     const scoreData = await page.evaluate(() => {
       const txt = document.body.innerText;
       const matches = txt.match(/\b([3-9][0-9]{2})\b/g);
@@ -293,8 +311,8 @@ app.post('/api/resend-otp', async (req, res) => {
   }
 
   try {
-    // Falls back to global loop logic to catch changing dynamic positions safely
-    await clickButton(session.page);
+    const resendSelector = 'span.OtpPopUp-module__CX5d0G__close'; // Re-evaluates target close/resend links
+    await session.page.click(resendSelector);
     res.json({
       success: true
     });
@@ -307,62 +325,46 @@ app.post('/api/resend-otp', async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────
-   HELPER — FILL FIELD
+   HELPER — HUMANIZED FIELD FILL MATRIX
 ───────────────────────────────────────────── */
 async function fillField(page, selectors, value) {
   for (const selector of selectors) {
     try {
-      await page.waitForSelector(selector, { timeout: 5000 });
+      await page.waitForSelector(selector, { visible: true, timeout: 5000 });
       const el = await page.$(selector);
       if (el) {
-        await el.click({
-          clickCount: 3
-        });
-        await el.type(value, {
-          delay: 70
-        });
+        // Move viewport safely to align layout elements
+        await page.evaluate(element => element.scrollIntoView({ block: 'center' }), el);
+        await el.focus();
+        
+        await el.click({ clickCount: 3 });
+        await page.keyboard.press('Backspace');
+        await delay(100);
+
+        // Types content with random interval variances (Bypasses basic keystroke cadence monitoring bot check)
+        for (const char of value.toString()) {
+          await el.type(char);
+          await delay(Math.floor(Math.random() * 60) + 40); 
+        }
+
+        // Bubbles validation changes up to React / Next.js front-end context arrays
+        await page.evaluate(element => {
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          element.dispatchEvent(new Event('blur', { bubbles: true }));
+        }, el);
+
         console.log(`✓ Filled ${selector}`);
         return true;
       }
     } catch (e) {}
   }
-  console.log(`✗ Could not fill field`);
+  console.log(`✗ Could not fill field inside provided configuration scope`);
   return false;
 }
 
 /* ─────────────────────────────────────────────
-   HELPER — CLICK BUTTON
-───────────────────────────────────────────── */
-async function clickButton(page) {
-  const buttons = await page.$$('button');
-  for (const btn of buttons) {
-    try {
-      const txt = await page.evaluate(
-        el => el.innerText,
-        btn
-      );
-      if (!txt) continue;
-      const t = txt.toLowerCase();
-
-      if (
-        t.includes('credit') ||
-        t.includes('score') ||
-        t.includes('submit') ||
-        t.includes('verify') ||
-        t.includes('proceed') ||
-        t.includes('otp')
-      ) {
-        await btn.click();
-        console.log(`✓ Clicked button: ${txt}`);
-        return true;
-      }
-    } catch (e) {}
-  }
-  return false;
-}
-
-/* ─────────────────────────────────────────────
-   DELAY
+   DELAY HELPER
 ───────────────────────────────────────────── */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
